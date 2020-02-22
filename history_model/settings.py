@@ -5,8 +5,6 @@ DEBUG = True
 
 SECRET_KEY = 'Change me!!!'
 
-ROOT_URLCONF = __name__
-
 INSTALLED_APPS = [
     'history_model',
     'poll',
