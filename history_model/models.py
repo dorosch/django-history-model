@@ -2,8 +2,8 @@ import importlib
 
 from django.db import models
 
-from .manager import HistoryDescriptor
 from .signals import SignalDispatcher
+from .managers import HistoryDescriptor
 
 
 class HistoryModel:
