@@ -2,7 +2,6 @@ import importlib
 
 from django.db import models
 
-from .signals import SignalDispatcher
 from .managers import HistoryDescriptor
 
 
@@ -21,8 +20,13 @@ class HistoryModel:
 
 
 class HistoryRecord:
-    @staticmethod
-    def contribute_to_class(original_model, name):
+    def __init__(self):
+        self.manager_name = None
+
+    def contribute_to_class(self, original_model, name):
+        # Save field of history manager
+        self.manager_name = name
+
         # Create history model as <ModelName>History
         history_model = HistoryModel(original_model).create()
 
@@ -36,4 +40,24 @@ class HistoryRecord:
         setattr(module, history_model.__name__, history_model)
 
         # Register signals for records of the original model
-        SignalDispatcher.register_signals(original_model)
+        models.signals.post_save.connect(
+            self.post_save, sender=original_model, weak=False
+        )
+        models.signals.post_delete.connect(
+            self.post_delete, sender=original_model, weak=False
+        )
+
+    def post_save(self, instance, created, **kwargs):
+        attrs = {
+            field.attname: getattr(instance, field.attname)
+            for field in instance._meta.fields
+        }
+        manager = getattr(instance, self.manager_name)
+
+        if created:
+            # TODO: Added if instance is updated
+            manager.model(**attrs).save(using=kwargs.get('using'))
+
+    def post_delete(self, instance, **kwargs):
+        manager = getattr(instance, self.manager_name)
+        manager.model.objects.filter(pk=instance.pk).delete()
