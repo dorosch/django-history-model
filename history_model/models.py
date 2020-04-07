@@ -1,6 +1,7 @@
 import importlib
 
 from django.db import models
+from django.utils.translation import gettext_lazy as _
 
 from .managers import HistoryDescriptor
 
@@ -12,8 +13,22 @@ class HistoryModel:
         self.name = f'{self.model._meta.object_name}History'
         self.attrs = {
             '__module__': self.model.__module__,
-            **{field.name: field for field in self.model._meta.fields}
+            'history_created': models.DateTimeField(
+                auto_now=True
+            ),
+            'history_action': models.CharField(
+                max_length=1,
+                choices=(
+                    ('+', _('Created')),
+                    ('~', _('Changed')),
+                    ('-', _('Deleted'))
+                )
+            )
         }
+        for field in self.model._meta.fields:
+            if field.primary_key:
+                field.primary_key = False
+            self.attrs[field.name] = field
 
     def create(self):
         return type(self.name, self.bases, self.attrs)
@@ -54,10 +69,16 @@ class HistoryRecord:
         }
         manager = getattr(instance, self.manager_name)
 
-        if created:
-            # TODO: Added if instance is updated
-            manager.model(**attrs).save(using=kwargs.get('using'))
+        manager.model(
+            history_action='+' if created else '~', **attrs
+        ).save(
+            using=kwargs.get('using')
+        )
 
     def post_delete(self, instance, **kwargs):
         manager = getattr(instance, self.manager_name)
-        manager.model.objects.filter(pk=instance.pk).delete()
+        manager.model.objects.filter(
+            pk=instance.pk
+        ).update(
+            history_action='-'
+        )
